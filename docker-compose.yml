@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  # ─── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: perfreview_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: perfreview
+      POSTGRES_PASSWORD: perfreview_secret
+      POSTGRES_DB: perfreview
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U perfreview"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis (notifications, rate limiting) ────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: perfreview_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  # ─── App (production build) ──────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: perfreview_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://perfreview:perfreview_secret@postgres:5432/perfreview
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: change_me_in_production_use_openssl_rand_base64_32
+      REDIS_URL: redis://redis:6379
+    env_file:
+      - .env.local
+
+  # ─── Adminer (DB UI, dev only) ───────────────────────────────────────────────
+  adminer:
+    image: adminer:latest
+    container_name: perfreview_adminer
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+    profiles:
+      - dev
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,125 @@
+performance-review-platform/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       └── deploy.yml
+├── prisma/
+│   ├── schema.prisma
+│   ├── migrations/
+│   └── seed.ts
+├── src/
+│   ├── app/                          # Next.js App Router
+│   │   ├── (auth)/
+│   │   │   ├── login/page.tsx
+│   │   │   ├── register/page.tsx
+│   │   │   └── reset-password/page.tsx
+│   │   ├── (dashboard)/
+│   │   │   ├── layout.tsx            # Shell avec sidebar
+│   │   │   ├── page.tsx              # Dashboard home
+│   │   │   ├── campaigns/
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── [id]/page.tsx
+│   │   │   │   └── new/page.tsx
+│   │   │   ├── evaluations/
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── [id]/page.tsx
+│   │   │   │   └── self/page.tsx
+│   │   │   ├── objectives/
+│   │   │   │   ├── page.tsx
+│   │   │   │   └── [id]/page.tsx
+│   │   │   ├── team/
+│   │   │   │   └── page.tsx
+│   │   │   ├── development/
+│   │   │   │   └── page.tsx
+│   │   │   ├── reporting/
+│   │   │   │   └── page.tsx
+│   │   │   ├── admin/
+│   │   │   │   ├── users/page.tsx
+│   │   │   │   ├── settings/page.tsx
+│   │   │   │   └── audit/page.tsx
+│   │   │   └── profile/page.tsx
+│   │   ├── api/
+│   │   │   ├── auth/[...nextauth]/route.ts
+│   │   │   ├── trpc/[trpc]/route.ts
+│   │   │   └── v1/
+│   │   │       ├── campaigns/route.ts
+│   │   │       ├── evaluations/route.ts
+│   │   │       ├── objectives/route.ts
+│   │   │       ├── users/route.ts
+│   │   │       └── reports/route.ts
+│   │   ├── globals.css
+│   │   └── layout.tsx
+│   ├── components/
+│   │   ├── ui/                       # ShadCN components
+│   │   ├── layout/
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── Header.tsx
+│   │   │   ├── MobileNav.tsx
+│   │   │   └── ThemeToggle.tsx
+│   │   ├── campaigns/
+│   │   │   ├── CampaignCard.tsx
+│   │   │   ├── CampaignForm.tsx
+│   │   │   └── CampaignStatus.tsx
+│   │   ├── evaluations/
+│   │   │   ├── EvaluationForm.tsx
+│   │   │   ├── CompetencyRating.tsx
+│   │   │   ├── ObjectiveProgress.tsx
+│   │   │   └── WorkflowStepper.tsx
+│   │   ├── dashboard/
+│   │   │   ├── StatsCard.tsx
+│   │   │   ├── CompletionChart.tsx
+│   │   │   ├── TeamOverview.tsx
+│   │   │   └── RecentActivity.tsx
+│   │   └── shared/
+│   │       ├── DataTable.tsx
+│   │       ├── SearchFilter.tsx
+│   │       ├── StatusBadge.tsx
+│   │       ├── ConfirmDialog.tsx
+│   │       └── FileUpload.tsx
+│   ├── lib/
+│   │   ├── prisma.ts                 # Prisma client singleton
+│   │   ├── auth.ts                   # NextAuth config
+│   │   ├── trpc.ts                   # tRPC setup
+│   │   ├── validations/              # Zod schemas
+│   │   │   ├── campaign.ts
+│   │   │   ├── evaluation.ts
+│   │   │   ├── objective.ts
+│   │   │   └── user.ts
+│   │   └── utils.ts
+│   ├── server/
+│   │   ├── routers/                  # tRPC routers
+│   │   │   ├── campaign.ts
+│   │   │   ├── evaluation.ts
+│   │   │   ├── objective.ts
+│   │   │   ├── user.ts
+│   │   │   ├── report.ts
+│   │   │   └── _app.ts
+│   │   ├── services/
+│   │   │   ├── campaign.service.ts
+│   │   │   ├── evaluation.service.ts
+│   │   │   ├── notification.service.ts
+│   │   │   ├── objective.service.ts
+│   │   │   └── report.service.ts
+│   │   ├── middleware/
+│   │   │   ├── rbac.ts
+│   │   │   ├── audit.ts
+│   │   │   └── rate-limit.ts
+│   │   └── context.ts
+│   ├── hooks/
+│   │   ├── useCurrentUser.ts
+│   │   ├── useCampaigns.ts
+│   │   ├── useEvaluations.ts
+│   │   └── usePermissions.ts
+│   └── types/
+│       ├── index.ts
+│       ├── enums.ts
+│       └── next-auth.d.ts
+├── docker-compose.yml
+├── Dockerfile
+├── .env.example
+├── .env.local
+├── package.json
+├── tsconfig.json
+├── tailwind.config.ts
+├── next.config.ts
+└── README.md

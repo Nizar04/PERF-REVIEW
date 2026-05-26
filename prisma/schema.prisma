@@ -1,0 +1,604 @@
+// ============================================================
+// PERFORMANCE REVIEW PLATFORM — Prisma Schema
+// ============================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  ADMIN
+  RH
+  MANAGER
+  COLLABORATEUR
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  CALIBRATION
+  CLOSED
+  ARCHIVED
+}
+
+enum EvaluationStatus {
+  NOT_STARTED
+  SELF_IN_PROGRESS
+  SELF_SUBMITTED
+  MANAGER_IN_PROGRESS
+  MANAGER_SUBMITTED
+  HR_REVIEW
+  CALIBRATION
+  VALIDATED
+  SIGNED
+  CLOSED
+}
+
+enum ObjectiveStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  CAMPAIGN_STARTED
+  SELF_EVAL_DUE
+  MANAGER_EVAL_DUE
+  EVALUATION_VALIDATED
+  EVALUATION_REOPENED
+  OBJECTIVE_DUE
+  INTERVIEW_SCHEDULED
+  PLAN_ACTION_DUE
+}
+
+enum DevelopmentActionType {
+  FORMATION
+  COACHING
+  MENTORING
+  MOBILITE
+  PROJET
+  AUTRE
+}
+
+enum DevelopmentActionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Gender {
+  M
+  F
+  OTHER
+  NOT_SPECIFIED
+}
+
+// ============================================================
+// ORGANISATION
+// ============================================================
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  domain      String?
+  settings    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  users         User[]
+  departments   Department[]
+  campaigns     Campaign[]
+  competencies  Competency[]
+  jobFamilies   JobFamily[]
+
+  @@map("organizations")
+}
+
+model Department {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  code           String?
+  parentId       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  parent       Department?   @relation("DeptHierarchy", fields: [parentId], references: [id])
+  children     Department[]  @relation("DeptHierarchy")
+  employees    Employee[]
+
+  @@unique([organizationId, code])
+  @@map("departments")
+}
+
+model JobFamily {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  level          Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  employees    Employee[]
+
+  @@map("job_families")
+}
+
+// ============================================================
+// USERS & EMPLOYEES
+// ============================================================
+
+model User {
+  id             String    @id @default(cuid())
+  organizationId String
+  email          String    @unique
+  emailVerified  DateTime?
+  password       String?   // null si OAuth
+  firstName      String
+  lastName       String
+  avatarUrl      String?
+  role           UserRole  @default(COLLABORATEUR)
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  employee      Employee?
+  accounts      Account[]
+  sessions      Session[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Employee {
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  departmentId   String?
+  jobFamilyId    String?
+  managerId      String?
+  matricule      String?
+  jobTitle       String?
+  jobLevel       String?   // Junior, Senior, Lead, Principal...
+  gender         Gender    @default(NOT_SPECIFIED)
+  birthDate      DateTime?
+  hireDate       DateTime?
+  siteLocation   String?
+  contractType   String?   // CDI, CDD, Alternance...
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  user            User         @relation(fields: [userId], references: [id])
+  department      Department?  @relation(fields: [departmentId], references: [id])
+  jobFamily       JobFamily?   @relation(fields: [jobFamilyId], references: [id])
+  manager         Employee?    @relation("ManagerSubordinates", fields: [managerId], references: [id])
+  subordinates    Employee[]   @relation("ManagerSubordinates")
+  evaluationsAsEvaluatee Evaluation[] @relation("EvaluateeEvaluations")
+  evaluationsAsEvaluator Evaluation[] @relation("EvaluatorEvaluations")
+  objectives      Objective[]
+  developmentPlans DevelopmentPlan[]
+
+  @@map("employees")
+}
+
+// ============================================================
+// CAMPAGNES
+// ============================================================
+
+model Campaign {
+  id             String         @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  year           Int
+  status         CampaignStatus @default(DRAFT)
+  startDate      DateTime
+  endDate        DateTime
+  selfEvalDeadline    DateTime?
+  managerEvalDeadline DateTime?
+  calibrationDate     DateTime?
+  
+  // Configuration workflow
+  requireSelfEval    Boolean @default(true)
+  requireManagerEval Boolean @default(true)
+  requireHRValidation Boolean @default(true)
+  requireSignature   Boolean @default(false)
+  
+  // Paramètres
+  settings       Json    @default("{}")
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  evaluations    Evaluation[]
+  campaignPopulations CampaignPopulation[]
+  campaignCompetencies CampaignCompetency[]
+
+  @@map("campaigns")
+}
+
+model CampaignPopulation {
+  id           String @id @default(cuid())
+  campaignId   String
+  departmentId String?
+  userId       String?
+  createdAt    DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+
+  @@map("campaign_populations")
+}
+
+// ============================================================
+// COMPÉTENCES
+// ============================================================
+
+model Competency {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  category       String?  // Comportementale, Technique, Managériale
+  weight         Float    @default(1.0)
+  maxScore       Int      @default(5)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  organization         Organization           @relation(fields: [organizationId], references: [id])
+  campaignCompetencies CampaignCompetency[]
+  ratings              CompetencyRating[]
+
+  @@map("competencies")
+}
+
+model CampaignCompetency {
+  id           String @id @default(cuid())
+  campaignId   String
+  competencyId String
+  weight       Float  @default(1.0)
+  orderIndex   Int    @default(0)
+
+  campaign   Campaign   @relation(fields: [campaignId], references: [id])
+  competency Competency @relation(fields: [competencyId], references: [id])
+
+  @@unique([campaignId, competencyId])
+  @@map("campaign_competencies")
+}
+
+// ============================================================
+// ÉVALUATIONS
+// ============================================================
+
+model Evaluation {
+  id            String           @id @default(cuid())
+  campaignId    String
+  evaluateeId   String           // Collaborateur évalué
+  evaluatorId   String?          // Manager évaluateur
+  hrValidatorId String?          // RH validateur
+  status        EvaluationStatus @default(NOT_STARTED)
+  
+  // Scores globaux (calculés)
+  selfScore        Float?
+  managerScore     Float?
+  finalScore       Float?
+  calibratedScore  Float?
+  
+  // Dates workflow
+  selfSubmittedAt    DateTime?
+  managerSubmittedAt DateTime?
+  hrValidatedAt      DateTime?
+  calibratedAt       DateTime?
+  signedByEmployeeAt DateTime?
+  signedByManagerAt  DateTime?
+  closedAt           DateTime?
+  
+  // Entretien
+  interviewDate    DateTime?
+  interviewNotes   String?       @db.Text
+  
+  // Commentaires généraux
+  selfStrengths    String?       @db.Text
+  selfImprovements String?       @db.Text
+  selfComments     String?       @db.Text
+  managerStrengths    String?    @db.Text
+  managerImprovements String?    @db.Text
+  managerComments     String?    @db.Text
+  hrComments          String?    @db.Text
+  
+  // Recommandations
+  promotionRecommended  Boolean @default(false)
+  salaryIncreaseAmount  Float?
+  nextYearObjectivesSet Boolean @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  campaign         Campaign           @relation(fields: [campaignId], references: [id])
+  evaluatee        Employee           @relation("EvaluateeEvaluations", fields: [evaluateeId], references: [id])
+  evaluator        Employee?          @relation("EvaluatorEvaluations", fields: [evaluatorId], references: [id])
+  objectives       ObjectiveEvaluation[]
+  competencyRatings CompetencyRating[]
+  feedbacks        Feedback[]
+  developmentPlan  DevelopmentPlan?
+  attachments      Attachment[]
+  workflowHistory  WorkflowHistory[]
+
+  @@unique([campaignId, evaluateeId])
+  @@map("evaluations")
+}
+
+model CompetencyRating {
+  id            String @id @default(cuid())
+  evaluationId  String
+  competencyId  String
+  selfScore     Float?
+  managerScore  Float?
+  selfComment   String? @db.Text
+  managerComment String? @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  competency Competency @relation(fields: [competencyId], references: [id])
+
+  @@unique([evaluationId, competencyId])
+  @@map("competency_ratings")
+}
+
+model WorkflowHistory {
+  id           String   @id @default(cuid())
+  evaluationId String
+  fromStatus   EvaluationStatus?
+  toStatus     EvaluationStatus
+  performedById String
+  comment      String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_history")
+}
+
+// ============================================================
+// OBJECTIFS
+// ============================================================
+
+model Objective {
+  id           String          @id @default(cuid())
+  employeeId   String
+  campaignId   String?
+  title        String
+  description  String?         @db.Text
+  kpi          String?
+  weight       Float           @default(1.0)
+  targetValue  String?
+  currentValue String?
+  progress     Int             @default(0) // 0-100%
+  status       ObjectiveStatus @default(DRAFT)
+  dueDate      DateTime?
+  year         Int
+  isSMARTValidated Boolean    @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  deletedAt    DateTime?
+
+  employee    Employee              @relation(fields: [employeeId], references: [id])
+  evaluations ObjectiveEvaluation[]
+
+  @@map("objectives")
+}
+
+model ObjectiveEvaluation {
+  id           String  @id @default(cuid())
+  evaluationId String
+  objectiveId  String
+  selfProgress     Int?   // 0-100
+  selfScore        Float? // note finale
+  selfComment      String? @db.Text
+  managerProgress  Int?
+  managerScore     Float?
+  managerComment   String? @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  objective  Objective  @relation(fields: [objectiveId], references: [id])
+
+  @@unique([evaluationId, objectiveId])
+  @@map("objective_evaluations")
+}
+
+// ============================================================
+// FEEDBACK 360
+// ============================================================
+
+model Feedback {
+  id           String   @id @default(cuid())
+  evaluationId String
+  fromUserId   String
+  toEmployeeId String
+  isAnonymous  Boolean  @default(false)
+  content      String   @db.Text
+  strengths    String?  @db.Text
+  improvements String?  @db.Text
+  score        Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@map("feedbacks")
+}
+
+// ============================================================
+// PLANS DE DÉVELOPPEMENT
+// ============================================================
+
+model DevelopmentPlan {
+  id           String   @id @default(cuid())
+  evaluationId String   @unique
+  employeeId   String
+  year         Int
+  summary      String?  @db.Text
+  hrComments   String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  evaluation Evaluation       @relation(fields: [evaluationId], references: [id])
+  employee   Employee         @relation(fields: [employeeId], references: [id])
+  actions    DevelopmentAction[]
+
+  @@map("development_plans")
+}
+
+model DevelopmentAction {
+  id                String                  @id @default(cuid())
+  developmentPlanId String
+  title             String
+  description       String?                 @db.Text
+  type              DevelopmentActionType   @default(FORMATION)
+  status            DevelopmentActionStatus @default(PLANNED)
+  priority          Int                     @default(1) // 1=High, 2=Medium, 3=Low
+  dueDate           DateTime?
+  completedAt       DateTime?
+  cost              Float?
+  provider          String?
+  comments          String?                 @db.Text
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  developmentPlan DevelopmentPlan @relation(fields: [developmentPlanId], references: [id], onDelete: Cascade)
+
+  @@map("development_actions")
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String?
+  link      String?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// ============================================================
+// FICHIERS JOINTS
+// ============================================================
+
+model Attachment {
+  id           String   @id @default(cuid())
+  evaluationId String
+  uploadedById String
+  fileName     String
+  fileSize     Int
+  mimeType     String
+  storageUrl   String
+  createdAt    DateTime @default(now())
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+// ============================================================
+// AUDIT LOGS (RGPD)
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String   // CREATE, UPDATE, DELETE, VIEW, LOGIN, etc.
+  resource   String   // Nom du model
+  resourceId String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([resource, resourceId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
